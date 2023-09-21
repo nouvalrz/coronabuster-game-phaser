@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import FallingObject from "../ui/FallingObject";
+import Laser from "../ui/Laser";
 
 export default class CoronaBusterScene extends Phaser.Scene{
     constructor() {
@@ -17,6 +18,8 @@ export default class CoronaBusterScene extends Phaser.Scene{
         this.emitter = undefined
         this.enemies = undefined
         this.enemySpeed = 60
+        this.lasers = undefined
+        this.lastFired = 0
     }
 
     preload(){
@@ -28,10 +31,16 @@ export default class CoronaBusterScene extends Phaser.Scene{
         this.load.spritesheet('player', 'images/ship.png', {frameWidth: 66, frameHeight: 66})
 
         this.load.audio('woosh', 'sfx/woosh.mp3')
+        this.load.audio('laser-shoot', 'sfx/laser-shoot.mp3')
+        this.load.audio('enemy-hit', 'sfx/enemy-hit.mp3')
 
         this.load.image('smoke', 'https://labs.phaser.io/assets/particles/smoke-puff.png')
 
         this.load.image('enemy', 'images/enemy.png')
+
+        this.load.spritesheet('laser', 'images/laser-bolts.png', {
+            frameWidth: 16, frameHeight: 32, startFrame: 16, endFrame: 32
+        })
     }
 
     create(){
@@ -51,18 +60,15 @@ export default class CoronaBusterScene extends Phaser.Scene{
 
         this.cursors = this.input.keyboard.createCursorKeys()
 
-        // const particles = this.add.particles('smoke')
 
         this.emitter = this.add.particles(0, 0, "smoke", {
-            speed: 1,
+            speed: 100,
             scale: { start: 0.12, end: 0.01, },
-            alpha: 0.5
+            alpha: 0.2
         }, );
 
-        // this.emitter.setDisplaySize(0.2, 0.2)
         this.emitter.startFollow(this.player, 0, 30)
 
-        // this.emitter.setParticleScale(0.5, 0.5)
 
         this.enemies = this.physics.add.group({
             classType: FallingObject,
@@ -76,9 +82,17 @@ export default class CoronaBusterScene extends Phaser.Scene{
             callbackScope: this,
             loop: true
         })
+
+        this.lasers = this.physics.add.group({
+            classType: Laser,
+            maxSize: 10,
+            runChildUpdate: true
+        })
+
+        this.physics.add.overlap(this.lasers, this.enemies, this.hitEnemy, undefined, this)
     }
 
-    update(){
+    update(time){
         this.clouds.children.iterate((child)=>{
             child.setVelocityY(20)
 
@@ -87,7 +101,7 @@ export default class CoronaBusterScene extends Phaser.Scene{
                 child.y = child.displayHeight * -1
             }
         })
-        this.movePlayer(this.player)
+        this.movePlayer(this.player, time)
     }
 
     createButton(){
@@ -117,25 +131,43 @@ export default class CoronaBusterScene extends Phaser.Scene{
         }, this)
     }
 
-    movePlayer(player){
+    movePlayer(player, time){
+        if((this.shoot || this.cursors.space.isDown) && (time > this.lastFired)){
+            const laser = this.lasers.get(0, 0, 'laser')
+            if(laser){
+                laser.fire(this.player.x, this.player.y)
+                if(this.sound.getAll('laser-shoot').length == 0){
+                    this.sound.play('laser-shoot', {volume: 0.2})
+                }
+                this.lastFired = time + 150
+            }
+        }
         if(this.nav_left || this.cursors.left.isDown){
             this.player.setVelocityX(this.speed * -1)
             this.player.anims.play('left', true)
             this.player.setFlipX(false)
-            this.sound.play('woosh', {volume: 0.2})
+            if(this.sound.getAll('woosh').length == 0){
+                this.sound.play('woosh', {volume: 0.2})
+            }
         }else if(this.nav_right || this.cursors.right.isDown){
             this.player.setVelocityX(this.speed)
             this.player.anims.play('right', true)
             this.player.setFlipX(true)
-            this.sound.play('woosh', {volume: 0.2})
+            if(this.sound.getAll('woosh').length == 0){
+                this.sound.play('woosh', {volume: 0.2})
+            }
         }else if(this.cursors.up.isDown){
             this.player.setVelocityY(this.speed * -1)
             this.player.anims.play('turn')
-            this.sound.play('woosh', {volume: 0.2})
+            if(this.sound.getAll('woosh').length == 0){
+                this.sound.play('woosh', {volume: 0.2})
+            }
         }else if(this.cursors.down.isDown){
             this.player.setVelocityY(this.speed)
             this.player.anims.play('turn')
-            this.sound.play('woosh', {volume: 0.2})
+            if(this.sound.getAll('woosh').length == 0){
+                this.sound.play('woosh', {volume: 0.2})
+            }
         }else{
             this.player.setVelocityX(0)
             this.player.setVelocityY(0)
@@ -179,6 +211,25 @@ export default class CoronaBusterScene extends Phaser.Scene{
         if(enemy){
             enemy.spawn(positionX)
         }
+    }
+
+    hitEnemy(laser, enemy){
+        laser.erase()
+        enemy.setActive(false)
+        
+        this.tweens.add({
+            targets: enemy,
+            alpha: 0,
+            ease: 'Cubic.easeOut',
+            duration: 100,
+            repeat: -1,
+            yoyo: true
+        })
+        setTimeout(()=>{
+            enemy.die()
+        }, 200)
+
+        this.sound.play('enemy-hit', {volume: 0.2})
     }
 
 }
